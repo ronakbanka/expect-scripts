@@ -1,0 +1,24 @@
+#!/usr/bin/expect
+set ossimserverip 192.168.10.9
+
+spawn bash
+send -- " useradd nagios ; passwd nagios \r"
+expect "Enter*"
+send -- "nagios\r"
+expect "Retype"
+send -- "nagios\r"
+expect "*#"
+send -- "cd /root/nagios-plugins-1.4.16 ; ./configure ; make ; make install\r"
+expect "*#"
+send -- " chown nagios:nagios /usr/local/nagios ; chown -R nagios:nagios /usr/local/nagios/libexec\r"
+expect "*#"
+send -- " cd /root/nrpe-2.12 ; ./configure --with-ssl=/usr/bin/openssl --with-ssl-lib=/usr/lib/x86_64-linux-gnu ; make all\r"
+expect "*#"
+send -- " make install-plugin ; make install-daemon ; make install-daemon-config ; make install-xinetd\r" 
+expect "*#"
+send -- "sed -i -e '15s/only_from       = 127.0.0.1/only_from       = $ossimserverip 127.0.0.1/g' /etc/xinetd.d/nrpe\r"
+expect "*#"
+send -- " echo \"nrpe 5666/tcp # NRPE\" >> /etc/services \r"
+expect "*#"
+send -- " service xinetd restart\r"
+interact
