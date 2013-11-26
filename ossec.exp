@@ -1,0 +1,118 @@
+#!/usr/bin/expect -f
+
+#setting up the variables and their values
+set password redhat
+set user root
+set host 192.168.10.9
+
+# spawned a new process ssh-keygen to remove any previous fingerprint
+spawn ssh-keygen -R 192.168.10.9
+#spawned bash process
+spawn bash
+expect "$"
+# sending the commands to change to tmp directory followed by ossec agent installation 
+send -- "cd /root/ossec-hids-* ; ./install.sh \r"
+#prompt for language
+expect "en]:"
+send -- "en\r"
+send -- "\n"
+#prompt for type of installation
+expect "(server, agent, local or help)?"
+send -- "agent\r"
+#prompt for installtion directory
+expect "*ossec]:"
+send -- "/var/ossec\r"
+#prompt for server ip address
+expect "server?:"
+send -- "192.168.10.9\r"
+#prompts for type of checks
+expect "*(y/n)*"
+send -- "y\r"
+expect "*(y/n)*"
+send -- "y\r"
+expect "*(y/n)*"
+send -- "y\r"
+send -- "\n"
+send -- "\n"
+#sending exit to come out of interact
+send "exit\r"
+interact
+
+#spawned process ifconfig to get ipaddress of vm
+spawn ifconfig eth0
+expect -re {inet addr:(\S+)}
+#assigning value of extracted ip to variable ipaddr
+set ipaddr $expect_out(1,string)
+spawn echo $ipaddr
+
+#spawned process to get hostanme of vm using regular expression
+spawn hostname -v
+expect -re {(\S+)}
+#assigning value of extracted hostname to variable name
+set name $expect_out(1,string)
+spawn echo $name
+interact
+
+#spawned ssh process to initiate ssh login with hostname and password passed from variables
+spawn ssh -q $user@$host   
+expect "(yes/no)?"
+send -- "yes\r"
+expect "*?assword:*"
+send -- "$password\r"
+expect "alienvault*"
+send -- "ls -l\r"
+expect "alienvault*"
+#calling create agent script with name and ipaddress from local machine
+send -- "/usr/share/ossim/scripts/ossec-create-agent.sh $name $ipaddr\r"
+expect "alienvault*"
+#extracting the id of the newly created agent using client.keys file
+send -- "cat /var/ossec/etc/client.keys | tail -1 | cut -c1-3\r"
+expect -re {\n(\S+)}
+#assigning the extracted id to variable id
+set id $expect_out(1,string)
+expect "*#"
+#calling extract key script with id to get key
+send -- "/usr/share/ossim/scripts/ossec-extract-key.sh $id | tail -16 | head -1\r"
+expect -re {\n(\S+)}
+#key is stored in variable
+set key $expect_out(1,string)
+send -- "\n"
+expect "alienvault*"
+send "exit\r"
+
+#controlled is returned back to local vm by spawning the bash
+spawn bash
+expect "*$name*"
+#manage agent bin file is called to add the extracted key to local system
+send -- "/var/ossec/bin/manage_agents\r"
+expect "*I or Q*"
+send -- "I\r"
+expect "*paste*"
+#extracted key is passed 
+send -- "$key\r"
+expect "*(y/n)*"
+send -- "y\r"
+send -- "\n"
+expect "*I or Q*"
+send -- "Q\r"
+expect "*$name*"
+send "exit\r"
+interact
+#expect "*#"
+#send -- "/var/ossec/bin/ossec-control restart\r"
+
+#ssh login initiated to restart the ossec server on ossim
+spawn ssh -q $user@$host
+expect "*?assword:*"
+send -- "$password\r"
+expect "alienvault*"
+send -- "/var/ossec/bin/ossec-control restart\r"
+expect "alienvault*"
+send "exit\r"
+interact
+
+#control back to local vm with spawning bash
+spawn bash
+#ossec agent on vm is restarted followed by removal of contents frm tmp directory and deleting the fingerprint of ossim server with ssh-keygen command
+send -- "/var/ossec/bin/ossec-control restart ; rm /tmp/* ;  ssh-keygen -R 192.168.10.9\r"
+interact
