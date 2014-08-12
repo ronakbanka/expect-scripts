@@ -1,5 +1,5 @@
 #!/usr/bin/expect -f
-
+#hello
 #setting up the variables and their values
 set password redhat
 set user root
